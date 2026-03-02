@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>☁️ txt2pub ☁️</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#333333">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="txt2pub">
+    <meta name="description" content="TXT 및 EPUB 파일을 병합/변환하는 간편한 도구">
+    
+    <style>
+        :root {
+            --primary: #333333;
+            --primary-hover: #000000;
+            --accent: #666666; 
+            --bg: #ffffff;
+            --card-bg: #ffffff;
+            --text-main: #333333; 
+            --text-sub: #666666;
+            --border: #dddddd;
+            --success: #000000; 
+            --drag-bg: #fafafa;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+            background: #ffffff; margin: 0; padding: 10px;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; box-sizing: border-box;
+        }
+        .container { width: 100%; max-width: 420px; position: relative; }
+        header { text-align: center; margin-bottom: 5px; }
+        header h1 { font-size: 1.4rem; font-weight: 900; color: var(--primary); margin: 0; }
+        header p { color: var(--text-sub); font-size: 0.7rem; margin-top: 2px; }
+        .card { background: var(--card-bg); border-radius: 16px; padding: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); margin-bottom: 8px; border: 2px solid var(--border); }
+        h3 { font-size: 0.8rem; margin: 0 0 6px 0; color: var(--primary); }
+        .options-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 6px; margin-bottom: 6px; }
+        .type-selector { display: flex; background: #f0f0f0; padding: 2px; border-radius: 10px; }
+        .type-selector label { flex: 1; text-align: center; padding: 4px; cursor: pointer; border-radius: 8px; font-weight: 700; font-size: 0.7rem; color: var(--text-sub); }
+        .type-selector input { display: none; }
+        .type-selector input:checked+label { background: white; color: var(--primary); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .pattern-input-area { margin-top: 15px; padding: 9px; background: #f5f5f5; border-radius: 12px; border: 1.5px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+        #pattern-input { width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.75rem; box-sizing: border-box; }
+        .drop-zone-main { border: 2px dashed var(--primary); border-radius: 12px; padding: 15px 10px; text-align: center; cursor: pointer; background: var(--drag-bg); margin-bottom: 6px; transition: background 0.2s; }
+        #btn-run { padding: 10px; background: var(--primary); color: white; border: none; border-radius: 50px; cursor: pointer; font-size: 0.9rem; font-weight: 800; box-shadow: 0 3px 0px #555555; }
+        #btn-preview-toc { padding: 10px; background: #666666; color: white; border: none; border-radius: 50px; cursor: pointer; font-size: 0.9rem; font-weight: 800; box-shadow: 0 3px 0px #444444; }
+        #logger { background: #fff; color: var(--text-sub); padding: 8px; height: 80px; overflow-y: auto; font-family: monospace; border-radius: 12px; font-size: 0.6rem; border: 1px solid var(--border); margin-top: 10px; }
+        .file-input { display: none; }
+        
+        #preview-overlay, #toc-preview-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: flex-end; }
+        #preview-box, #toc-preview-box { background: white; width: 100%; max-width: 420px; height: 80%; border-radius: 20px 20px 0 0; padding: 20px; display: flex; flex-direction: column; }
+        #header-preview-content, #toc-preview-content { flex: 1; overflow-y: auto; font-size: 0.8rem; margin-top: 10px; border-top: 1px solid #eee; }
+        .header-line { padding: 8px 4px; border-bottom: 1px solid #eee; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>☁️ txt2pub ☁️</h1>
+            <p>우주 최강 귀요미 변환 및 병합기</p>
+        </header>
+
+        <div class="card">
+            <h3>☁️ 1. TXT 넣기</h3>
+            <label for="input-txt" class="drop-zone-main" id="drop-txt">
+                <p style="font-size:0.8rem;">TXT 또는 EPUB 파일을 여기에 드래그하거나 클릭하세요</p>
+                <div id="file-list" style="font-size:0.6rem;"></div>
+            </label>
+            <input type="file" id="input-txt" class="file-input" multiple accept=".txt, .epub">
+            
+            <div style="display: flex; gap: 6px;">
+                <button id="btn-preview-toc" style="flex: 1;">목차 미리보기 🔍</button>
+                <button id="btn-run" style="flex: 1.5;">EPUB 만들기! ✨</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>☁️ 2. 스타일 설정</h3>
+            <div class="options-grid">
+                <div class="type-selector">
+                    <input type="radio" name="type" value="series" id="radio-series" checked>
+                    <label for="radio-series">연재</label>
+                    <input type="radio" name="type" value="book" id="radio-book">
+                    <label for="radio-book">단행</label>
+                </div>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <input type="checkbox" id="check-cover"> <label for="check-cover" style="font-size:0.7rem;">표지 사용</label>
+                    <input type="file" id="input-cover" class="file-input" accept="image/*">
+                    <button onclick="document.getElementById('input-cover').click()" style="font-size:0.6rem; padding:2px 5px;">선택</button>
+                </div>
+            </div>
+            <div class="pattern-input-area">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <label style="font-size:0.65rem;">장/화 구분 패턴</label>
+                    <button id="btn-check-header" style="font-size:0.6rem; padding:2px 5px; border-radius:4px; border:1px solid #333; background:none; cursor:pointer;">앞부분 확인</button>
+                </div>
+                <input type="text" id="pattern-input" placeholder="예: 제1장, 001화">
+                <div id="start-detection-result" style="font-size:0.65rem; color:blue;"></div>
+            </div>
+        </div>
+
+        <div id="logger"></div>
+    </div>
+
+    <!-- 앞부분 확인 및 수동 선택 레이어 -->
+    <div id="preview-overlay">
+        <div id="preview-box">
+            <h3>앞부분 확인 및 목차 설정</h3>
+            <p style="font-size:0.6rem; color:#888;">* 불필요한 줄은 삭제하고, 시작 줄을 클릭하여 지정할 수 있습니다.</p>
+            <div id="header-preview-content"></div>
+            <button onclick="document.getElementById('preview-overlay').style.display='none'" style="margin-top:10px; padding:10px; background:#666; color:white; border:none; border-radius:10px;">닫기</button>
+        </div>
+    </div>
+
+    <!-- 목차 미리 보기 레이어 -->
+    <div id="toc-preview-overlay">
+        <div id="toc-preview-box">
+            <h3>🔍 목차 미리 보기</h3>
+            <p style="font-size:0.6rem; color:#888;">* 현재 설정된 패턴으로 추출된 목차 구조입니다.</p>
+            <div id="toc-preview-content" style="padding-top: 10px;"></div>
+            <button onclick="document.getElementById('toc-preview-overlay').style.display='none'" style="margin-top:10px; padding:10px; background:#666; color:white; border:none; border-radius:10px;">닫기</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+        const State = {
+            selectedFiles: [],
+            coverFile: null,
+            manualHeaderIdx: undefined
+        };
+
+        const UI = {
+            log: document.getElementById('logger'),
+            addLog(msg, type='') {
+                const div = document.createElement('div');
+                div.textContent = `> ${msg}`;
+                if(type === 'error') div.style.color = 'red';
+                if(type === 'success') div.style.color = 'green';
+                this.log.appendChild(div);
+                this.log.scrollTop = this.log.scrollHeight;
+            }
+        };
+
+        // 로컬/비보안 환경에서도 작동하는 안전한 UUID 생성기
+        const generateUUID = () => {
+            if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+                try { return crypto.randomUUID(); } catch(e) {}
+            }
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        };
+
+        // XML 파싱 오류를 방지하는 특수문자 이스케이프 함수
+        const escapeXml = (unsafe) => {
+            if (!unsafe) return "";
+            return unsafe.replace(/[<>&'"]/g, function (c) {
+                switch (c) {
+                    case '<': return '&lt;';
+                    case '>': return '&gt;';
+                    case '&': return '&amp;';
+                    case '\'': return '&apos;';
+                    case '"': return '&quot;';
+                }
+            });
+        };
+
+        const deletedHeaderLines = new Set();
+
+        window.deleteHeaderLine = function(lineIdx) {
+            deletedHeaderLines.add(lineIdx);
+            const lineElements = document.querySelectorAll('#header-preview-content .header-line');
+            if (lineElements[lineIdx]) {
+                lineElements[lineIdx].style.display = 'none';
+                UI.addLog(`L${lineIdx+1} 줄 삭제 완료`, 'success');
+            }
+        };
+
+        window.selectStartLine = function(lineText, element) {
+            const patternInput = document.getElementById('pattern-input');
+            const resultDiv = document.getElementById('start-detection-result');
+            patternInput.value = lineText;
+            State.manualHeaderIdx = parseInt(element.getAttribute('data-idx'), 10);
+            resultDiv.textContent = `📌 수동 지정: ${lineText}`;
+            UI.addLog(`수동 시작점 지정됨`, 'success');
+        };
+
+        const inputTxt = document.getElementById('input-txt');
+        const dropZone = document.getElementById('drop-txt');
+
+        inputTxt.onchange = (e) => {
+            State.selectedFiles = Array.from(e.target.files);
+            document.getElementById('file-list').textContent = `${State.selectedFiles.length}개의 파일 선택됨`;
+            UI.addLog(`${State.selectedFiles.length}개 파일 로드 완료`);
+        };
+
+        // 드래그 앤 드롭 동작 정상화
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.backgroundColor = '#eef';
+        });
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.style.backgroundColor = 'var(--drag-bg)';
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.backgroundColor = 'var(--drag-bg)';
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                inputTxt.files = e.dataTransfer.files;
+                inputTxt.dispatchEvent(new Event('change'));
+            }
+        });
+
+        document.getElementById('input-cover').onchange = (e) => {
+            if(e.target.files.length > 0) {
+                State.coverFile = e.target.files[0];
+                document.getElementById('check-cover').checked = true;
+                UI.addLog(`표지 선택됨: ${State.coverFile.name}`);
+            }
+        };
+
+        document.getElementById('btn-check-header').onclick = async () => {
+            if (State.selectedFiles.length === 0) return alert('파일을 먼저 선택해주세요.');
+            if (State.selectedFiles[0].name.toLowerCase().endsWith('.epub')) return alert('EPUB 파일은 텍스트 미리보기를 지원하지 않습니다.');
+            
+            const text = await State.selectedFiles[0].text();
+            const lines = text.split('\n').slice(0, 100);
+            
+            const contentBox = document.getElementById('header-preview-content');
+            let html = '';
+            
+            lines.forEach((line, idx) => {
+                const safeLine = line.trim().replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                if (!safeLine) return;
+                
+                const displayStyle = deletedHeaderLines.has(idx) ? 'display:none;' : 'display:flex; justify-content:space-between; align-items:center;';
+                
+                html += `<div class="footer-line header-line" data-idx="${idx}" style="${displayStyle}">
+                    <div onclick="selectStartLine('${safeLine}', this.parentElement)" style="flex:1; cursor:pointer;">
+                        <span style="color:#ccc; font-size:0.55rem; margin-right:4px;">L${idx+1}</span> ${escapeXml(line)}
+                    </div>
+                    <button onclick="event.stopPropagation(); deleteHeaderLine(${idx})" style="font-size:0.45rem; padding:1px 5px; background:var(--success); color:white; border:none; border-radius:4px; cursor:pointer; margin-left:4px; font-weight:700;">삭제</button>
+                </div>`;
+            });
+
+            contentBox.innerHTML = html;
+            document.getElementById('preview-overlay').style.display = 'flex';
+        };
+
+        // 목차 미리보기 기능
+        document.getElementById('btn-preview-toc').onclick = async () => {
+            const files = State.selectedFiles || [];
+            if (files.length === 0) return UI.addLog('파일을 먼저 선택해주세요.', 'error');
+
+            const isEpubMerge = files[0].name.toLowerCase().endsWith('.epub');
+            if (isEpubMerge) return UI.addLog('EPUB 병합 모드에서는 목차 미리 보기를 지원하지 않습니다.', 'error');
+
+            const pattern = document.getElementById('pattern-input').value.trim();
+            let tocHtml = '<ul style="padding-left: 20px;">';
+            let foundCount = 0;
+
+            for (const f of files) {
+                const volumeName = f.name.replace(/\.txt$/i, '');
+                if (files.length > 1) {
+                    tocHtml += `<li style="margin-top: 10px; margin-bottom: 5px; font-weight: bold; color: var(--primary);">[합본] ${escapeXml(volumeName)}</li>`;
+                }
+                
+                const text = await f.text();
+                const lines = text.split(/\r?\n/);
+                
+                lines.forEach((line, lineIdx) => {
+                    if (deletedHeaderLines.has(lineIdx)) return;
+                    const trimmed = line.trim();
+                    
+                    let isChapter = false;
+                    if (pattern && trimmed.includes(pattern)) isChapter = true;
+                    if (State.manualHeaderIdx === lineIdx && files.indexOf(f) === 0) isChapter = true;
+
+                    if (isChapter) {
+                        tocHtml += `<li style="margin-bottom: 4px; color: #444;">${escapeXml(trimmed)}</li>`;
+                        foundCount++;
+                    }
+                });
+            }
+            tocHtml += '</ul>';
+            
+            if (foundCount === 0 && files.length === 1) {
+                tocHtml = '<p style="color:red; font-weight:bold;">추출된 목차가 없습니다. 패턴을 다시 확인하거나 앞부분 확인을 통해 수동으로 지정해주세요.</p>';
+            }
+
+            document.getElementById('toc-preview-content').innerHTML = tocHtml;
+            document.getElementById('toc-preview-overlay').style.display = 'flex';
+            UI.addLog(`목차 ${foundCount}개 항목 미리 보기 완료`, 'success');
+        };
+
+        document.getElementById('btn-run').onclick = async () => {
+            const files = State.selectedFiles || [];
+            if (files.length === 0) return UI.addLog('파일을 먼저 선택해주세요!', 'error');
+
+            const isEpubMerge = files[0].name.toLowerCase().endsWith('.epub');
+            const mixed = files.some(f => f.name.toLowerCase().endsWith('.epub') !== isEpubMerge);
+            
+            if (mixed) {
+                return UI.addLog('TXT 파일과 EPUB 파일은 섞어서 병합할 수 없습니다.', 'error');
+            }
+
+            const runBtn = document.getElementById('btn-run');
+            runBtn.disabled = true;
+            runBtn.textContent = '변환 중... ⏳';
+
+            try {
+                if (isEpubMerge) {
+                    await performEpubMerge(files);
+                } else {
+                    await performTxtToEpub(files);
+                }
+            } catch (err) {
+                UI.addLog('오류 발생: ' + err.message, 'error');
+                console.error(err);
+            } finally {
+                runBtn.disabled = false;
+                runBtn.textContent = 'EPUB 만들기! ✨';
+            }
+        };
+
+        // 책 제목 추출: 공통 문자열을 기반으로 권수 관련 정보를 모두 제거 후 "_합본" 추가
+        function getCleanBookTitle(files) {
+            if (!files || files.length === 0) return "새_전자책";
+            
+            let names = files.map(f => f.name.replace(/\.(txt|epub)$/i, ''));
+            if (names.length === 1) return names[0];
+
+            let prefix = names[0];
+            for (let i = 1; i < names.length; i++) {
+                while (names[i].indexOf(prefix) !== 0) {
+                    prefix = prefix.substring(0, prefix.length - 1);
+                    if (prefix === "") break;
+                }
+            }
+
+            if (prefix) {
+                let oldPrefix;
+                do {
+                    oldPrefix = prefix;
+                    prefix = prefix.replace(/(?:제\s*)?[0-9상중하전완\s~~\-&,]+(?:권|화|장|부|편|기|회|부작)?\s*$/i, '');
+                    prefix = prefix.replace(/(?:제|완결|텍본|합본|최종)\s*$/i, '');
+                    prefix = prefix.replace(/[\s\-_\[(]+$/, '');
+                } while (prefix !== oldPrefix);
+                
+                prefix = prefix.trim();
+            }
+
+            return prefix ? prefix + "_합본" : "합본";
+        }
+
+        // EPUB 파일 병합 로직
+        async function performEpubMerge(files) {
+            UI.addLog('EPUB 병합 프로세스 시작...', 'success');
+            const masterZip = new JSZip();
+            let masterManifest = "";
+            let masterSpine = "";
+            let navItems = "";
+            
+            let bookTitle = getCleanBookTitle(files);
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                UI.addLog(`[${i+1}/${files.length}] ${file.name} 추출 중...`);
+                
+                const epubZip = await JSZip.loadAsync(file);
+                
+                const containerXmlFile = epubZip.file("META-INF/container.xml");
+                if (!containerXmlFile) throw new Error(`${file.name}은(는) 유효한 EPUB 파일이 아닙니다.`);
+                const containerXml = await containerXmlFile.async("text");
+                
+                const parser = new DOMParser();
+                const containerDoc = parser.parseFromString(containerXml, "application/xml");
+                const rootfiles = containerDoc.getElementsByTagName("rootfile");
+                if (rootfiles.length === 0) throw new Error(`OPF 경로를 찾을 수 없습니다: ${file.name}`);
+                
+                const opfPath = rootfiles[0].getAttribute("full-path");
+                const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : "";
+                
+                const opfXml = await epubZip.file(opfPath).async("text");
+                const opfDoc = parser.parseFromString(opfXml, "application/xml");
+                
+                let epTitle = file.name.replace(/\.epub$/i, '');
+                const titleNodes = opfDoc.getElementsByTagName("dc:title");
+                if (titleNodes.length > 0) epTitle = titleNodes[0].textContent;
+                else if (opfDoc.getElementsByTagName("title").length > 0) epTitle = opfDoc.getElementsByTagName("title")[0].textContent;
+
+                const items = opfDoc.getElementsByTagName("item");
+                const itemrefs = opfDoc.getElementsByTagName("itemref");
+                
+                const spineIdRefs = Array.from(itemrefs).map(node => node.getAttribute("idref"));
+                let firstSpineHref = "";
+
+                for (let j = 0; j < items.length; j++) {
+                    const item = items[j];
+                    const id = item.getAttribute("id");
+                    const href = item.getAttribute("href");
+                    const mediaType = item.getAttribute("media-type");
+                    let properties = item.getAttribute("properties") || "";
+                    
+                    properties = properties.replace("nav", "").trim();
+                    const propAttr = properties ? ` properties="${properties}"` : "";
+
+                    const absPath = opfDir + href;
+                    const newPath = `epub${i}/${absPath}`;
+
+                    masterManifest += `<item id="epub${i}_${id}" href="${newPath}" media-type="${mediaType}"${propAttr}/>\n`;
+
+                    if (spineIdRefs.length > 0 && id === spineIdRefs[0]) {
+                        firstSpineHref = newPath;
+                    }
+
+                    const fileData = epubZip.file(absPath);
+                    if (fileData) {
+                        masterZip.file(newPath, fileData.async("blob"));
+                    }
+                }
+
+                spineIdRefs.forEach(idref => {
+                    masterSpine += `<itemref idref="epub${i}_${idref}"/>\n`;
+                });
+
+                navItems += `<li><a href="${firstSpineHref}">${escapeXml(epTitle)}</a></li>\n`;
+            }
+
+            const navHtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>목차</title></head>
+<body><nav epub:type="toc" id="toc"><h1>합본 목차</h1><ol>${navItems}</ol></nav></body></html>`;
+            masterZip.file("nav.xhtml", navHtml);
+            masterManifest += `<item id="master_nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>\n`;
+
+            const masterOpf = `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="pub-id" version="3.0">
+    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+        <dc:identifier id="pub-id">urn:uuid:${generateUUID()}</dc:identifier>
+        <dc:title>${escapeXml(bookTitle)}</dc:title>
+        <dc:language>ko</dc:language>
+        <meta property="dcterms:modified">${new Date().toISOString().split('.')[0]}Z</meta>
+    </metadata>
+    <manifest>${masterManifest}</manifest>
+    <spine>${masterSpine}</spine>
+</package>`;
+            
+            masterZip.file("content.opf", masterOpf);
+            masterZip.file("mimetype", "application/epub+zip");
+            masterZip.file("META-INF/container.xml", `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`);
+
+            UI.addLog('압축 중... (EPUB 용량에 따라 지연될 수 있습니다)');
+            const content = await masterZip.generateAsync({type:"blob"});
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(content);
+            link.download = `${bookTitle}.epub`;
+            link.click();
+            UI.addLog('EPUB 합본 완료!', 'success');
+        }
+
+        // TXT 변환 로직
+        async function performTxtToEpub(files) {
+            UI.addLog('TXT 변환 프로세스 시작...', 'success');
+            const pattern = document.getElementById('pattern-input').value.trim();
+            const useCover = document.getElementById('check-cover').checked;
+            const zip = new JSZip();
+            
+            let fullText = "";
+            for (const f of files) {
+                const volumeName = f.name.replace(/\.txt$/i, '');
+                if (files.length > 1) {
+                    fullText += `\n\n[VOLUME_SPLIT]${volumeName}\n\n`;
+                }
+                fullText += await f.text() + "\n\n";
+            }
+
+            const lines = fullText.split(/\r?\n/);
+            const sections = [];
+            let currentSection = { title: "시작", lines: [] };
+
+            lines.forEach((line, lineIdx) => {
+                if (deletedHeaderLines.has(lineIdx)) return;
+                const trimmed = line.trim();
+
+                if (trimmed.startsWith('[VOLUME_SPLIT]')) {
+                    if (currentSection.lines.length > 0 || currentSection.title !== "시작") {
+                        sections.push(currentSection);
+                    }
+                    const volTitle = trimmed.replace('[VOLUME_SPLIT]', '');
+                    currentSection = { 
+                        title: volTitle, 
+                        lines: [`<h1 class="volume-title" style="text-align:center; padding-top:15%; font-size:1.8em; border-bottom:3px double #333; padding-bottom:10px; margin-bottom:30px;">${escapeXml(volTitle)}</h1>`] 
+                    };
+                    return;
+                }
+
+                let isChapter = false;
+                if (pattern && trimmed.includes(pattern)) isChapter = true;
+                if (State.manualHeaderIdx === lineIdx) isChapter = true;
+
+                if (isChapter) {
+                    if (currentSection.lines.length > 0 || currentSection.title !== "시작") {
+                        sections.push(currentSection);
+                    }
+                    currentSection = { 
+                        title: trimmed, 
+                        lines: [`<h2 class="chapter-title" style="text-align:center; border-bottom:1px solid #ccc; margin-bottom:2em; padding-bottom:1em;">${escapeXml(trimmed)}</h2>`] 
+                    };
+                    return;
+                }
+
+                if (trimmed) {
+                    currentSection.lines.push(`<p>${escapeXml(trimmed)}</p>`);
+                } else {
+                    currentSection.lines.push(`<p class="br"><br/></p>`);
+                }
+            });
+            sections.push(currentSection);
+
+            zip.file("mimetype", "application/epub+zip");
+            zip.file("META-INF/container.xml", `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`);
+
+            let manifestItems = "";
+            let spineItems = "";
+            let navItems = "";
+
+            sections.forEach((sec, idx) => {
+                const fileName = `chapter_${idx}.xhtml`;
+                const fileId = `ch${idx}`;
+                const title = sec.title || `Chapter ${idx + 1}`;
+                const safeTitle = escapeXml(title);
+                
+                const xhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>${safeTitle}</title><style>body{padding:5%; line-height:1.6;}</style></head>
+<body>${sec.lines.join('\n')}</body></html>`;
+                zip.file(`OEBPS/Text/${fileName}`, xhtml);
+                manifestItems += `<item id="${fileId}" href="Text/${fileName}" media-type="application/xhtml+xml"/>\n`;
+                spineItems += `<itemref idref="${fileId}"/>\n`;
+                navItems += `<li><a href="Text/${fileName}">${safeTitle}</a></li>\n`;
+            });
+
+            let coverManifest = "";
+            if(useCover && State.coverFile) {
+                const ext = State.coverFile.name.split('.').pop();
+                zip.file(`OEBPS/Images/cover.${ext}`, State.coverFile);
+                coverManifest = `<item id="cover-image" href="Images/cover.${ext}" media-type="image/${ext === 'jpg' ? 'jpeg' : ext}"/>\n`;
+                const coverHtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Cover</title><style>body{margin:0;padding:0;text-align:center;} img{max-width:100%;height:auto;}</style></head><body><img src="../Images/cover.${ext}" alt="cover"/></body></html>`;
+                zip.file("OEBPS/Text/cover.xhtml", coverHtml);
+                manifestItems = `<item id="cover-page" href="Text/cover.xhtml" media-type="application/xhtml+xml"/>\n` + manifestItems;
+                spineItems = `<itemref idref="cover-page"/>\n` + spineItems;
+            }
+
+            const navHtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>목차</title></head><body><nav epub:type="toc" id="toc"><h1>목차</h1><ol>${navItems}</ol></nav></body></html>`;
+            zip.file("OEBPS/Text/nav.xhtml", navHtml);
+
+            let bookTitle = getCleanBookTitle(files);
+
+            const opf = `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="pub-id" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="pub-id">urn:uuid:${generateUUID()}</dc:identifier><dc:title>${escapeXml(bookTitle)}</dc:title><dc:language>ko</dc:language><meta property="dcterms:modified">${new Date().toISOString().split('.')[0]}Z</meta></metadata><manifest><item id="nav" href="Text/nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${coverManifest}${manifestItems}</manifest><spine>${spineItems}</spine></package>`;
+            zip.file("OEBPS/content.opf", opf);
+
+            const content = await zip.generateAsync({type:"blob"});
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(content);
+            link.download = `${bookTitle}.epub`;
+            link.click();
+            UI.addLog('TXT 변환 및 병합 완료!', 'success');
+        }
+    </script>
+</body>
+</html>
