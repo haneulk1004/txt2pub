@@ -1,4 +1,4 @@
-# txt2pub (txt2pub_1)
+# txt2pub
 
 브라우저에서 **TXT 또는 EPUB 파일을 업로드**하면,
 - **TXT만 업로드 시 → TXT 합본 1개 생성**
